@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlaylistPull — Enhanced</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#080000; --surface:#110000; --border:#5a0000; --accent:#ff2233; --text:#f0d8d8; --muted:#884444; }
+body { background:var(--bg); color:var(--text); font-family:'Syne',sans-serif; margin:0; }
+.container { max-width:900px; margin:auto; padding:40px 20px; }
+.title { font-size:32px; font-weight:800; margin-bottom:20px; }
+.input-section { background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:6px; }
+label { font-family:'Space Mono'; font-size:11px; color:var(--muted); display:block; margin-top:16px; }
+textarea, select, input { width:100%; background:#040000; border:1px solid var(--border); color:var(--text); padding:12px; margin-top:6px; }
+button { background:var(--accent); border:none; padding:12px 18px; color:white; font-weight:700; cursor:pointer; margin-top:12px; }
+.row { display:flex; gap:10px; flex-wrap:wrap; }
+.preset button { background:#220000; font-size:12px; }
+.preview { background:#030000; border:1px solid var(--border); padding:16px; margin-top:16px; font-family:'Space Mono'; font-size:12px; }
+.card { background:#0a0000; border:1px solid var(--border); padding:14px; margin-top:12px; font-family:'Space Mono'; font-size:11px; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="title">PlaylistPull Enhanced</div>
+
+<div class="input-section">
+
+<label>// URLs (multiple supported)</label>
+<textarea id="urlInput" placeholder="Paste playlist or video links"></textarea>
+
+<div class="row preset">
+<button onclick="applyPreset('mp3')">MP3</button>
+<button onclick="applyPreset('720')">720p</button>
+<button onclick="applyPreset('best')">Best</button>
+</div>
+
+<!-- NEW PATH SYSTEM -->
+<label>// Base folder</label>
+<select id="baseFolder">
+<option value="~/Downloads">Downloads</option>
+<option value="~/Desktop">Desktop</option>
+<option value="~/Music">Music</option>
+</select>
+
+<label>// Subfolder</label>
+<input type="text" id="subFolder" value="%(playlist)s">
+
+<label>// Format</label>
+<select id="formatSelect">
+<option value="bestvideo+bestaudio">Best quality</option>
+<option value="bestvideo[height<=720]+bestaudio">720p</option>
+<option value="bestaudio">Audio only</option>
+</select>
+
+<button onclick="generate()">Generate</button>
+
+<div class="preview" id="preview">Command preview will appear here</div>
+<div class="card" id="info">Playlist info will appear here</div>
+<div class="card" id="estimate">Estimated size will appear here</div>
+
+<div class="row">
+<button onclick="savePreset()">Save preset</button>
+<button onclick="loadPreset()">Load preset</button>
+</div>
+
+</div>
+</div>
+
+<script>
+
+window.addEventListener('focus', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text.includes('youtube')) {
+      document.getElementById('urlInput').value = text;
+      generate();
+    }
+  } catch(e) {}
+});
+
+function applyPreset(type){
+  const f = document.getElementById('formatSelect');
+  if(type==='mp3') f.value='bestaudio';
+  if(type==='720') f.value='bestvideo[height<=720]+bestaudio';
+  if(type==='best') f.value='bestvideo+bestaudio';
+  generate();
+}
+
+async function fetchPlaylistInfo(url){
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+    return await res.json();
+  } catch { return null; }
+}
+
+async function generate(){
+  const urls = document.getElementById('urlInput').value.split('\n');
+  const format = document.getElementById('formatSelect').value;
+  const base = document.getElementById('baseFolder').value;
+  const sub = document.getElementById('subFolder').value || '%(playlist)s';
+
+  const outputPath = `${base}/${sub}/%(title)s.%(ext)s`;
+
+  let cmd = '';
+  let count = 0;
+  let first = null;
+
+  urls.forEach(u=>{
+    if(u.trim()){
+      if(!first) first = u.trim();
+      cmd += `yt-dlp -f "${format}" -o "${outputPath}" "${u}"\n`;
+      count++;
+    }
+  });
+
+  document.getElementById('preview').innerText = cmd || 'Waiting for input...';
+
+  if(first){
+    const info = await fetchPlaylistInfo(first);
+    if(info){
+      document.getElementById('info').innerHTML = `<strong>${info.title}</strong><br>by ${info.author_name}<br><img src="${info.thumbnail_url}" style="width:120px;margin-top:6px;border:1px solid #400">`;
+    }
+  }
+
+  document.getElementById('estimate').innerText = count ? `Estimated size: ~${count*120}MB` : 'No estimation';
+}
+
+function savePreset(){
+  const data = {
+    format: document.getElementById('formatSelect').value,
+    base: document.getElementById('baseFolder').value,
+    sub: document.getElementById('subFolder').value
+  };
+  localStorage.setItem('ppreset', JSON.stringify(data));
+}
+
+function loadPreset(){
+  const data = JSON.parse(localStorage.getItem('ppreset'));
+  if(data){
+    document.getElementById('formatSelect').value = data.format;
+    document.getElementById('baseFolder').value = data.base;
+    document.getElementById('subFolder').value = data.sub;
+    generate();
+  }
+}
+
+</script>
+</body>
+</html>
